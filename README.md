@@ -112,3 +112,7 @@ git clone https://github.com/Kim-9202/OverdriveCombat.git
 ## 상태
 
 개인 개발 중인 플러그인이다. API는 예고 없이 바뀔 수 있다.
+
+## 라이선스
+
+All rights reserved. 열람 목적으로만 공개한다 — 복제·수정·배포·이용을 허가하지 않는다.
