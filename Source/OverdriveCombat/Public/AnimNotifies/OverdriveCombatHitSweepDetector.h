@@ -76,13 +76,22 @@ public:
 	/** RelativeTransform 이 private 이므로 에디터 모듈이 쓰는 프로퍼티 이름 통로. */
 	static FName GetRelativeTransformPropertyName();
 
-	/** 프리뷰 포즈의 소켓 위치에 정적 셰이프 하나를 그린다(기즈모 저작 표시). */
+	/** 프리뷰 포즈의 소켓 위치에 정적 셰이프 하나를 그린다. 베이크된 궤적이 없을 때의 저작 표시용 폴백이다. */
 	void DrawEditorShapes(FPrimitiveDrawInterface* PDI, const USkeletalMeshComponent* MeshComp, const FLinearColor& Color) const;
+
+	/**
+	 * 베이크된 앵커 샘플 전체를 궤적으로 그린다. 인접 샘플 한 쌍(세그먼트)마다 스윕 볼륨 실루엣을 그리고,
+	 * 샘플 중심을 잇는 폴리라인을 그 위에 얹는다. 실루엣 모양은 런타임 디버그 드로우와 같다.
+	 * 노티파이가 선택돼 에디트 모드가 살아 있는 동안에만 호출된다(런타임 디버그 드로우와 무관).
+	 *
+	 * 인접 세그먼트의 끝·시작 셰이프는 같은 위치에 겹쳐 그려진다(같은 색이라 시각적으로 무해).
+	 */
+	void DrawEditorSweepPath(FPrimitiveDrawInterface* PDI, const TArray<FTransform>& SamplesCompSpace, const FTransform& ComponentToWorld, const FLinearColor& ShapeColor, const FLinearColor& PathColor) const;
 #endif
 
 #if ENABLE_DRAW_DEBUG
-	/** 샘플 목록을 인접 쌍마다 스윕 볼륨으로 그린다. 프리뷰 / 런타임 디버그. */
-	void DrawDebugSweep(const UWorld* World, const TArray<FTransform>& SamplesCompSpace, const FTransform& ComponentToWorld, int32 OverrideDrawMode = -1) const;
+	/** 인접 샘플 한 쌍(세그먼트)의 스윕 볼륨을 그린다. 판정이 진행되는 시점에 세그먼트 단위로 호출한다. */
+	void DrawDebugSweepSegment(const UWorld* World, const FTransform& StartSampleCompSpace, const FTransform& EndSampleCompSpace, const FTransform& ComponentToWorld) const;
 #endif
 
 private:

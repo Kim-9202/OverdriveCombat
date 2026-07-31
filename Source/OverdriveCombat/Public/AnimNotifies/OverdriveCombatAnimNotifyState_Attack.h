@@ -10,6 +10,7 @@
 
 class UOverdriveCombatHitSweepDetector;
 class UPrimitiveComponent;
+class UWorld;
 
 /**
  * 앵커 궤적의 한 키프레임. 에디터에서 베이크해 직렬화하고, 런타임은 이 값을 그대로 스윕에 쓴다.
@@ -23,24 +24,35 @@ struct FOverdriveCombatAttackKeyframe
 	UPROPERTY()
 	FTransform Transform = FTransform::Identity;
 
-	/** 노티파이 윈도우 로컬 시간(초). 런타임은 Elapsed 가 이 값을 지날 때 스윕한다. */
+	/** 이 키프레임을 실행할 몽타주 트랙 시간(초). 런타임은 CurrentAnimationTime 이 이 값을 지날 때 스윕한다. */
 	UPROPERTY()
 	float Time = 0.0f;
+};
+
+/** 디테일 패널의 Cache 버튼 자리표시자. 값은 없고, 에디터 모듈의 프로퍼티 타입 커스터마이제이션이 이 자리에 버튼을 그린다. */
+USTRUCT()
+struct FOverdriveCombatCacheKeyframesButton
+{
+	GENERATED_BODY()
 };
 
 /**
  * 구간 스윕 공격 판정 노티파이 스테이트.
  *
  * 앵커 소켓 궤적은 런타임이 아니라 에디터에서 미리 캐싱한다. 디테일 패널의 Cache 버튼(CacheAttackKeyframes)을 누르면
- * 노티파이 구간을 SubStepTime(초) 단위로 나눠, 각 시점의 소켓 컴포넌트 상대 트랜스폼과 윈도우 로컬 시간을 몽타주
+ * 노티파이 구간을 SubStepTime(초) 단위로 나눠, 각 시점의 소켓 컴포넌트 상대 트랜스폼과 몽타주 트랙 시간을 몽타주
  * 슬롯에서 평가해 CachedKeyframes 에 직렬화한다. 런타임은 샘플링 없이 이 캐시를 그대로 사용한다.
  *
- * 런타임에는 경과 시간(Elapsed)이 각 키프레임의 Time 을 지날 때마다 인접 키프레임을 현재 컴포넌트 트랜스폼으로 스윕하고,
- * 그 틱에 나온 신규 히트를 모아 곧바로 GameplayEvent 로 전송한다(틱당 1회). 이전 스윕에서 이미 닿은
- * 컴포넌트는 노티파이 구간 전체에 걸쳐 무시한다. 서버 권위에서만 이벤트를 보낸다.
+ * 런타임에는 이벤트 참조가 알려주는 현재 애니메이션 시간(CurrentAnimationTime)이 각 키프레임의 Time 을 지날 때마다
+ * 인접 키프레임을 현재 컴포넌트 트랜스폼으로 스윕하고, 그 틱에 나온 신규 히트를 모아 곧바로 GameplayEvent 로
+ * 전송한다(틱당 1회). 몽타주 시간을 그대로 쓰므로 PlayRate·일시정지·에디터 스크럽까지 궤적과 동기화된다.
+ * 시간이 되감겨도(섹션 루프·점프) 이미 처리한 세그먼트로 돌아가지 않는다.
+ * 이전 스윕에서 이미 닿은 컴포넌트는 노티파이 구간 전체에 걸쳐 무시한다. 서버 권위에서만 이벤트를 보낸다.
  *
  * 컴포넌트 상대 공간으로 캐싱하므로 캐릭터 로코모션이 스윕 볼륨을 부풀리지 않는다.
- * 애님 에디터 프리뷰에서는 물리 판정 없이 캐싱 궤적을 디버그 드로우(od.Combat.DrawHitDetection)만 한다.
+ * 애님 에디터 프리뷰에서는 세그먼트 진행 규칙은 런타임과 같게 두되 물리 판정·이벤트 전송만 건너뛰고,
+ * 지나간 세그먼트를 그때그때 디버그 드로우한다(od.Combat.DrawHitDetection).
+ * 구간 전체 궤적은 노티파이를 선택했을 때 에디터 모듈의 에디트 모드가 그린다.
  *
  * 노티파이 인스턴스는 애님 애셋당 하나뿐이고 여러 메시가 공유하므로, 런타임 상태는 메시별로 보관한다.
  */
@@ -50,6 +62,8 @@ class OVERDRIVECOMBAT_API UOverdriveCombatAnimNotifyState_Attack : public UAnimN
 	GENERATED_BODY()
 
 public:
+	UOverdriveCombatAnimNotifyState_Attack(const FObjectInitializer& ObjectInitializer);
+
 	virtual void NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyTick(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float FrameDeltaTime, const FAnimNotifyEventReference& EventReference) override;
 	virtual void NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference) override;
@@ -66,6 +80,9 @@ public:
 	const FOverdriveCombatImpactNormalSpec& GetImpactNormalSpec() const { return ImpactNormalSpec; }
 
 #if WITH_EDITOR
+	/** 에디트 모드가 구간 전체 궤적을 그리기 위해 읽는 베이크 결과. */
+	const TArray<FOverdriveCombatAttackKeyframe>& GetCachedKeyframes() const { return CachedKeyframes; }
+
 	/** 기즈모가 드래그한 컴포넌트 상대 원점을 반영한다. */
 	void SetAttackOrigin(const FVector& InLocal) { AttackOrigin = InLocal; }
 
@@ -83,16 +100,15 @@ public:
 	void CacheAttackKeyframes();
 
 	virtual bool CanBePlaced(UAnimSequenceBase* Animation) const override;
-	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+
+	/** 로드·저장 시점의 캐시 점검 훅. 노티파이를 옮기거나 길이를 바꾼 뒤 재베이크를 잊으면 AssetCheck 메시지 로그로 경고한다. */
+	virtual void ValidateAssociatedAssets() override;
 #endif
 
 private:
 	/** 메시 인스턴스별 런타임 스윕 상태. 샘플링은 하지 않고 진행 세그먼트와 누적 중복만 추적한다. */
 	struct FInstanceRuntimeState
 	{
-		/** NotifyBegin 이후 누적 경과 시간. 키프레임 Time 과 비교해 스윕 시점을 판단한다. */
-		float Elapsed = 0.0f;
-
 		/** 다음에 스윕할 세그먼트 인덱스(0 .. N-1). */
 		int32 NextSegment = 0;
 
@@ -100,19 +116,39 @@ private:
 		TSet<TWeakObjectPtr<UPrimitiveComponent>> AlreadyHitComponents;
 	};
 
+	/**
+	 * 아직 처리하지 않은 세그먼트 중 처리 시점이 된 것들을 한 묶음으로 처리한다.
+	 * 틱과 구간 종료 모두 AnimTimeLimit 에 그 시점의 애니메이션 시간을 넘긴다.
+	 *
+	 * 게임 월드에서는 스윕 판정 후 이 묶음의 신규 히트를 한 번에 전송하고,
+	 * 프리뷰 액터에는 ASC 도 판정 대상도 없으므로 에디터 프리뷰에서는 세그먼트 디버그 드로우만 한다.
+	 */
+	void ProcessDueSegments(USkeletalMeshComponent* MeshComp, FInstanceRuntimeState& State, float AnimTimeLimit) const;
+
+	/**
+	 * 처리 시점이 된 마지막 세그먼트의 다음 인덱스(FromSegment .. N). 다음 키프레임 Time 이 AnimTimeLimit 이하인 세그먼트까지가 대상이다.
+	 * 항상 FromSegment 부터 스캔하므로 애니메이션 시간이 되감겨도 이미 처리한 세그먼트로 돌아가지 않는다.
+	 * 프리뷰 드로우와 런타임 판정이 같은 진행 규칙을 쓰도록 이 한 곳에서만 판단한다.
+	 */
+	int32 FindDueSegmentEnd(float AnimTimeLimit, int32 FromSegment) const;
+
 #if WITH_EDITOR
+	/** [FirstSegment, EndSegment) 구간의 스윕 볼륨을 디버그 드로우한다. 애님 에디터 프리뷰 전용 경로다. */
+	void DrawPreviewSegments(const UWorld* World, const FTransform& ComponentToWorld, int32 FirstSegment, int32 EndSegment) const;
+
 	/** 캐싱된 포즈에서 앵커(소켓/본/루트)의 컴포넌트 상대 트랜스폼을 해석한다. 런타임 GetSocketTransform 와 동일 의미. */
 	FTransform ResolveAnchorComponentSpace(const struct FAnimPose& Pose, FName AnchorName, const class USkeletalMesh* Mesh) const;
 
-	/** 이 노티파이 인스턴스가 배치된 이벤트의 구간(시작·길이)을 몽타주에서 찾는다. 캐싱·검증이 공유한다. */
-	bool TryGetNotifyWindow(const class UAnimMontage* Montage, float& OutStartTime, float& OutDuration) const;
+	/** 이 노티파이 인스턴스가 배치된 이벤트의 구간(시작·끝 시간)을 몽타주에서 찾는다. 캐싱·검증이 공유한다. */
+	bool TryGetNotifyWindow(const class UAnimMontage* Montage, float& OutStartTime, float& OutEndTime) const;
+
 #endif
 
 	/** 구간 스윕을 수행하는 디텍터. */
 	UPROPERTY(EditAnywhere, Instanced, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UOverdriveCombatHitSweepDetector> HitDetector;
 
-	/** 공격자에게 전송할 GameplayEvent 태그. 비워 두면 Combat.Event.Hit 을 쓴다. */
+	/** 공격자에게 전송할 GameplayEvent 태그. 기본값은 Combat.Event.Hit 이고, 지워서 비우면 전송 시 그 기본 태그로 대체된다. */
 	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event"))
 	FGameplayTag EventTag;
 
@@ -132,9 +168,17 @@ private:
 	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", ClampMin = "0.005", ForceUnits = "s"))
 	float SubStepTime = 0.02f;
 
-	/** 마지막 베이크 시점의 노티파이 윈도우 길이(초). 현재 길이와 다르면 캐시가 스테일임을 알린다. */
+	/** CacheAttackKeyframes 를 실행하는 버튼 자리. 저장되는 값은 없다. */
+	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
+	FOverdriveCombatCacheKeyframesButton CacheKeyframesButton;
+
+	/** 마지막 베이크 시점의 노티파이 구간 시작(몽타주 트랙 시간). 현재 구간과 다르면 캐시가 낡은 것이다. */
 	UPROPERTY()
-	float CachedTotalDuration = 0.0f;
+	float CachedStartTime = 0.0f;
+
+	/** 마지막 베이크 시점의 노티파이 구간 끝(몽타주 트랙 시간). 시작과 함께 스테일 판정에 쓴다. */
+	UPROPERTY()
+	float CachedEndTime = 0.0f;
 #endif
 
 	/** 에디터에서 베이크된 컴포넌트 상대 앵커 키프레임들. 런타임은 이 값을 그대로 스윕에 쓴다. */

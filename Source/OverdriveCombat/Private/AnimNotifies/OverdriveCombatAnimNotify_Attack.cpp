@@ -19,7 +19,8 @@
 #include "AbilitySystemComponent.h"
 
 #if WITH_EDITOR
-#include "Misc/DataValidation.h"
+#include "Logging/MessageLog.h"
+#include "Misc/UObjectToken.h"
 #endif
 
 #define LOCTEXT_NAMESPACE "OverdriveCombatAnimNotify_Attack"
@@ -32,7 +33,8 @@ UOverdriveCombatAnimNotify_Attack::UOverdriveCombatAnimNotify_Attack(const FObje
 
 void UOverdriveCombatAnimNotify_Attack::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
 {
-	if (!ensure(MeshComp != nullptr && HitDetector != nullptr))
+	// 디텍터 미설정은 데이터 실수라 발화마다 어설션을 띄우지 않는다. ValidateAssociatedAssets 가 로드·저장 때 경고한다.
+	if (MeshComp == nullptr || HitDetector == nullptr)
 	{
 		return;
 	}
@@ -52,7 +54,7 @@ void UOverdriveCombatAnimNotify_Attack::Notify(USkeletalMeshComponent* MeshComp,
 	Context.OwnerActor = InstigatorActor;
 	Context.WorldOrigin = ComponentToWorld.TransformPosition(AttackOrigin);
 
-#if WITH_EDITOR && ENABLE_DRAW_DEBUG
+#if WITH_EDITOR
 	// 에디터 프리뷰에서는 물리 판정 없이 셰이프만 디버그 드로우한다.
 	if (World->WorldType == EWorldType::EditorPreview)
 	{
@@ -73,18 +75,16 @@ void UOverdriveCombatAnimNotify_Attack::Notify(USkeletalMeshComponent* MeshComp,
 	ImpactContext.ComponentToWorld = ComponentToWorld;
 	OverdriveCombatHitEvents::ApplyImpactPostProcess(TargetDataHandle, ImpactContext, ImpactNormalSpec);
 
-	if (!EventTag.IsValid())
-	{
-		EventTag = OverdriveCombatTags::Combat_Event_Hit.GetTag();
-	}
+	// 노티파이 인스턴스는 애님 애셋당 하나이고 여러 메시가 공유하므로, 태그가 비었어도 멤버를 고치지 않고 지역으로 대체한다.
+	const FGameplayTag ResolvedEventTag = EventTag.IsValid() ? EventTag : OverdriveCombatTags::Combat_Event_Hit;
 
 	FGameplayEventData Payload;
-	Payload.EventTag = EventTag;
+	Payload.EventTag = ResolvedEventTag;
 	Payload.Instigator = InstigatorActor;
 
 	Payload.TargetData = TargetDataHandle;
 
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(InstigatorActor, EventTag, Payload);
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(InstigatorActor, ResolvedEventTag, Payload);
 }
 
 FString UOverdriveCombatAnimNotify_Attack::GetNotifyName_Implementation() const
@@ -114,17 +114,35 @@ bool UOverdriveCombatAnimNotify_Attack::CanBePlaced(UAnimSequenceBase* Animation
 	return Animation != nullptr && Animation->IsA(UAnimMontage::StaticClass());
 }
 
-EDataValidationResult UOverdriveCombatAnimNotify_Attack::IsDataValid(FDataValidationContext& Context) const
+void UOverdriveCombatAnimNotify_Attack::ValidateAssociatedAssets()
 {
-	EDataValidationResult Result = Super::IsDataValid(Context);
+	Super::ValidateAssociatedAssets();
 
-	if (HitDetector == nullptr)
+	static const FName NAME_AssetCheck("AssetCheck");
+
+	UObject* ContainingAsset = GetContainingAsset();
+	if (ContainingAsset == nullptr || HitDetector != nullptr)
 	{
-		Context.AddError(LOCTEXT("MissingHitDetector", "Combat Attack 노티파이에 HitDetector 가 지정되지 않았습니다."));
-		Result = EDataValidationResult::Invalid;
+		return;
 	}
 
-	return Result;
+	FMessageLog AssetCheckLog(NAME_AssetCheck);
+
+	const FText Message = FText::Format(
+		LOCTEXT("MissingHitDetector", "{0} 의 Attack 노티파이에 HitDetector 가 지정되지 않았습니다."),
+		FText::AsCultureInvariant(GetNameSafe(ContainingAsset)));
+
+	// 애셋 토큰을 붙이면 로그 항목을 눌러 해당 몽타주로 바로 이동할 수 있다.
+	AssetCheckLog.Warning()
+		->AddToken(FUObjectToken::Create(ContainingAsset))
+		->AddToken(FTextToken::Create(Message));
+
+	if (GIsEditor)
+	{
+		// 로드·저장 중에도 사용자가 놓치지 않도록 알림을 띄운다(엔진 노티파이 검증 관례).
+		const bool bForce = true;
+		AssetCheckLog.Notify(Message, EMessageSeverity::Warning, bForce);
+	}
 }
 #endif
 

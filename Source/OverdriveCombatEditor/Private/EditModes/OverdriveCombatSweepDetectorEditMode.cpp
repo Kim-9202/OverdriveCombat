@@ -9,6 +9,12 @@
 
 const FEditorModeID FOverdriveCombatSweepDetectorEditMode::ModeID(TEXT("OverdriveCombat.SweepDetectorEditMode"));
 
+namespace
+{
+	/** 베이크 궤적의 셰이프 와이어 색. 경로선에 묻히도록 어둡게 깔아 배경처럼 보이게 한다. */
+	const FLinearColor SweepPathShapeColor(0.45f, 0.22f, 0.0f);
+}
+
 void FOverdriveCombatSweepDetectorEditMode::SetTarget(UOverdriveCombatHitSweepDetector* InDetector, UOverdriveCombatAnimNotifyState_Attack* InNotify, UAnimSequenceBase* InAnimAsset)
 {
 	TargetDetector = InDetector;
@@ -74,10 +80,35 @@ void FOverdriveCombatSweepDetectorEditMode::SetShapeRelativeTransform(const FTra
 
 void FOverdriveCombatSweepDetectorEditMode::RenderShape(FPrimitiveDrawInterface* PDI, const FLinearColor& Color) const
 {
-	if (const UOverdriveCombatHitSweepDetector* Detector = TargetDetector.Get())
+	const UOverdriveCombatHitSweepDetector* Detector = TargetDetector.Get();
+	if (Detector == nullptr)
 	{
-		Detector->DrawEditorShapes(PDI, GetPreviewMeshComponent(), Color);
+		return;
 	}
+
+	const UOverdriveCombatAnimNotifyState_Attack* Notify = TargetNotify.Get();
+	const UDebugSkelMeshComponent* PreviewMeshComponent = GetPreviewMeshComponent();
+	const int32 KeyframeCount = (Notify != nullptr) ? Notify->GetCachedKeyframes().Num() : 0;
+
+	// 베이크된 궤적이 있으면 구간 전체를 그린다. 현재 포즈의 셰이프는 이 궤적에 이미 포함되므로 따로 그리지 않는다.
+	if (KeyframeCount >= 2 && PreviewMeshComponent != nullptr)
+	{
+		// 디텍터는 트랜스폼 배열을 받으므로 키프레임에서 트랜스폼만 뽑아 넘긴다.
+		TArray<FTransform> SamplesCompSpace;
+		SamplesCompSpace.Reserve(KeyframeCount);
+		for (const FOverdriveCombatAttackKeyframe& Keyframe : Notify->GetCachedKeyframes())
+		{
+			SamplesCompSpace.Add(Keyframe.Transform);
+		}
+
+		// 경로선에는 선택 강조색을 그대로 쓴다(셰이프 핸들 선택 여부가 궤적에도 드러난다).
+		Detector->DrawEditorSweepPath(PDI, SamplesCompSpace, PreviewMeshComponent->GetComponentTransform(), SweepPathShapeColor, Color);
+
+		return;
+	}
+
+	// 베이크 전에는 궤적이 없으므로 현재 포즈 위치에 셰이프 하나만 그려 치수·오프셋 편집 피드백을 남긴다.
+	Detector->DrawEditorShapes(PDI, PreviewMeshComponent, Color);
 }
 
 UObject* FOverdriveCombatSweepDetectorEditMode::GetShapeOwnerObject() const

@@ -38,6 +38,8 @@ public class OverdriveCombatEditor : ModuleRules
 				"AnimationEditMode",
 				// IAnimationEditor (노티파이 선택 델리게이트)
 				"AnimationEditor",
+				// IPropertyTypeCustomization / FPropertyEditorModule / FDetailWidgetRow
+				"PropertyEditor",
 				"OverdriveCombat",
 			}
 			);

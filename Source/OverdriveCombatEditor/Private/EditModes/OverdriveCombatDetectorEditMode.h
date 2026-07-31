@@ -160,6 +160,12 @@ private:
 	FVector GetDirectionWorld(const FOverdriveCombatImpactContext& Context) const;
 
 	/**
+	 * 방향 화살표의 시작 지점(월드). Origin 마커에서 방향으로 조금 띄운 곳이라
+	 * 화살표의 히트 프록시가 Origin 프록시를 덮지 않는다. 화살표 / 라벨 / 회전 기즈모가 공유한다.
+	 */
+	FVector GetDirectionArrowStart(const FOverdriveCombatImpactContext& Context) const;
+
+	/**
 	 * 선택 핸들이 바뀐 뒤 전역 위젯 모드가 그 핸들에서 못 쓰는 모드면 쓸 수 있는 모드로 스냅한다.
 	 * 핸들마다 허용 모드가 달라(Origin=이동, Direction=회전) 그냥 두면 기즈모가 통째로
 	 * 사라져 편집이 막힌 것처럼 보인다.

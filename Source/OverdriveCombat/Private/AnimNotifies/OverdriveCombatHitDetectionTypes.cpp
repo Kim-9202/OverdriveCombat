@@ -20,6 +20,11 @@
 #include "KismetTraceUtils.h"
 #endif
 
+#if WITH_EDITOR
+// 와이어 헬퍼(DrawWireSphere 등)와 FPrimitiveDrawInterface 를 함께 끌어온다.
+#include "PrimitiveDrawingUtils.h"
+#endif
+
 namespace
 {
 	/**
@@ -91,7 +96,7 @@ namespace OverdriveCombatHitEvents
 		// 태그가 비어 있으면 기본 히트 이벤트 태그로 대체한다.
 		if (!EventTag.IsValid())
 		{
-			EventTag = OverdriveCombatTags::Combat_Event_Hit.GetTag();
+			EventTag = OverdriveCombatTags::Combat_Event_Hit;
 		}
 
 		FGameplayEventData Payload;
@@ -218,3 +223,77 @@ namespace OverdriveCombatDebug
 }
 
 #endif // ENABLE_DRAW_DEBUG
+
+#if WITH_EDITOR
+
+namespace OverdriveCombatDebug
+{
+	void DrawEditorShapeAt(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Location, const FQuat& Rotation, const FLinearColor& Color)
+	{
+		const FVector AxisX = Rotation.GetAxisX();
+		const FVector AxisY = Rotation.GetAxisY();
+		const FVector AxisZ = Rotation.GetAxisZ();
+
+		if (Shape.IsSphere())
+		{
+			DrawWireSphere(PDI, Location, Color, Shape.GetSphereRadius(), 16, SDPG_World);
+		}
+		else if (Shape.IsCapsule())
+		{
+			DrawWireCapsule(PDI, Location, AxisX, AxisY, AxisZ, Color, Shape.GetCapsuleRadius(), Shape.GetCapsuleHalfHeight(), 16, SDPG_World);
+		}
+		else if (Shape.IsBox())
+		{
+			DrawOrientedWireBox(PDI, Location, AxisX, AxisY, AxisZ, Shape.GetExtent(), Color, SDPG_World);
+		}
+	}
+
+	void DrawEditorShapeSweep(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Start, const FVector& End, const FQuat& Rotation, const FLinearColor& Color)
+	{
+		// 0-길이 스윕은 방향 벡터가 없어 실루엣이 성립하지 않는다. 제자리 판정이므로 셰이프 하나로 그린다.
+		if (End.Equals(Start))
+		{
+			DrawEditorShapeAt(PDI, Shape, Start, Rotation, Color);
+
+			return;
+		}
+
+		const FVector TraceVec = End - Start;
+
+		if (Shape.IsSphere())
+		{
+			// 구 스윕의 실제 판정 볼륨 = 스윕 방향으로 늘인 캡슐. DrawWireCapsule 의 HalfHeight 는
+			// 캡 포함 전체 절반 높이라 DrawDebugCapsule 과 의미가 같다(내부에서 radius 차감).
+			const FVector Center = Start + TraceVec * 0.5f;
+			const double HalfHeight = TraceVec.Size() * 0.5 + Shape.GetSphereRadius();
+			const FMatrix SweepMatrix = FRotationMatrix::MakeFromZ(TraceVec);
+			DrawWireCapsule(PDI, Center, SweepMatrix.GetUnitAxis(EAxis::X), SweepMatrix.GetUnitAxis(EAxis::Y), SweepMatrix.GetUnitAxis(EAxis::Z), Color, Shape.GetSphereRadius(), HalfHeight, 16, SDPG_World);
+
+			return;
+		}
+
+		DrawEditorShapeAt(PDI, Shape, Start, Rotation, Color);
+		DrawEditorShapeAt(PDI, Shape, End, Rotation, Color);
+
+		if (Shape.IsCapsule())
+		{
+			PDI->DrawLine(Start, End, Color, SDPG_World);
+
+			return;
+		}
+
+		// 박스: 시작 박스의 꼭짓점 8개를 스윕 벡터만큼 연결한다.
+		const FVector HalfSize = Shape.GetExtent();
+		for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
+		{
+			const FVector SignedExtent(
+				(CornerIndex & 1) ? HalfSize.X : -HalfSize.X,
+				(CornerIndex & 2) ? HalfSize.Y : -HalfSize.Y,
+				(CornerIndex & 4) ? HalfSize.Z : -HalfSize.Z);
+			const FVector Corner = Start + Rotation.RotateVector(SignedExtent);
+			PDI->DrawLine(Corner, Corner + TraceVec, Color, SDPG_World);
+		}
+	}
+}
+
+#endif // WITH_EDITOR

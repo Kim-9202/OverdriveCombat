@@ -21,6 +21,14 @@
 
 #define LOCTEXT_NAMESPACE "OverdriveCombatHitSweepDetector"
 
+#if WITH_EDITOR
+namespace
+{
+	/** 궤적선 굵기. 촘촘한 셰이프 와이어 사이에서 경로가 묻히지 않을 정도. */
+	constexpr float SweepPathLineThickness = 2.0f;
+}
+#endif
+
 FCollisionShape UOverdriveCombatHitSweepDetector::MakeCollisionShape() const
 {
 	switch (ShapeType)
@@ -117,23 +125,20 @@ void UOverdriveCombatHitSweepDetector::DetectHitForSegment(const USkeletalMeshCo
 }
 
 #if ENABLE_DRAW_DEBUG
-void UOverdriveCombatHitSweepDetector::DrawDebugSweep(const UWorld* World, const TArray<FTransform>& SamplesCompSpace, const FTransform& ComponentToWorld, int32 OverrideDrawMode) const
+void UOverdriveCombatHitSweepDetector::DrawDebugSweepSegment(const UWorld* World, const FTransform& StartSampleCompSpace, const FTransform& EndSampleCompSpace, const FTransform& ComponentToWorld) const
 {
-	if (World == nullptr || SamplesCompSpace.Num() < 2)
+	if (World == nullptr)
 	{
 		return;
 	}
 
-	const FCollisionShape Shape = MakeCollisionShape();
-	const TArray<FHitResult> NoHits; // 물리 판정을 하지 않으므로 히트 없음. 스윕 볼륨만 그린다.
+	const FTransform StartXform = ComposeWorldPlacement(StartSampleCompSpace, ComponentToWorld);
+	const FTransform EndXform = ComposeWorldPlacement(EndSampleCompSpace, ComponentToWorld);
 
-	for (int32 Index = 0; Index + 1 < SamplesCompSpace.Num(); ++Index)
-	{
-		const FTransform StartXform = ComposeWorldPlacement(SamplesCompSpace[Index], ComponentToWorld);
-		const FTransform EndXform = ComposeWorldPlacement(SamplesCompSpace[Index + 1], ComponentToWorld);
+	// 물리 판정 없이 부르는 경로(프리뷰)도 있으므로 히트는 호출자가 아니라 여기서 비워 둔다.
+	const TArray<FHitResult> NoHits;
 
-		OverdriveCombatDebug::DrawShapeSweep(World, Shape, StartXform.GetLocation(), EndXform.GetLocation(), StartXform.GetRotation(), NoHits, OverrideDrawMode);
-	}
+	OverdriveCombatDebug::DrawShapeSweep(World, MakeCollisionShape(), StartXform.GetLocation(), EndXform.GetLocation(), StartXform.GetRotation(), NoHits);
 }
 #endif
 
@@ -154,24 +159,38 @@ void UOverdriveCombatHitSweepDetector::DrawEditorShapes(FPrimitiveDrawInterface*
 	const FTransform SocketCompSpace = MeshComp->GetSocketTransform(SocketName, RTS_Component);
 	const FTransform WorldXform = ComposeWorldPlacement(SocketCompSpace, MeshComp->GetComponentTransform());
 
-	const FCollisionShape Shape = MakeCollisionShape();
-	const FVector Location = WorldXform.GetLocation();
-	const FQuat Rotation = WorldXform.GetRotation();
-	const FVector AxisX = Rotation.GetAxisX();
-	const FVector AxisY = Rotation.GetAxisY();
-	const FVector AxisZ = Rotation.GetAxisZ();
+	OverdriveCombatDebug::DrawEditorShapeAt(PDI, MakeCollisionShape(), WorldXform.GetLocation(), WorldXform.GetRotation(), Color);
+}
 
-	if (Shape.IsSphere())
+void UOverdriveCombatHitSweepDetector::DrawEditorSweepPath(FPrimitiveDrawInterface* PDI, const TArray<FTransform>& SamplesCompSpace, const FTransform& ComponentToWorld, const FLinearColor& ShapeColor, const FLinearColor& PathColor) const
+{
+	if (PDI == nullptr || SamplesCompSpace.Num() == 0)
 	{
-		DrawWireSphere(PDI, Location, Color, Shape.GetSphereRadius(), 16, SDPG_World);
+		return;
 	}
-	else if (Shape.IsCapsule())
+
+	// 디텍터 셰이프는 샘플마다 바뀌지 않으므로 루프 밖에서 한 번만 만든다.
+	const FCollisionShape Shape = MakeCollisionShape();
+
+	FVector PreviousLocation = FVector::ZeroVector;
+	FQuat PreviousRotation = FQuat::Identity;
+
+	for (int32 Index = 0; Index < SamplesCompSpace.Num(); ++Index)
 	{
-		DrawWireCapsule(PDI, Location, AxisX, AxisY, AxisZ, Color, Shape.GetCapsuleRadius(), Shape.GetCapsuleHalfHeight(), 16, SDPG_World);
-	}
-	else if (Shape.IsBox())
-	{
-		DrawOrientedWireBox(PDI, Location, AxisX, AxisY, AxisZ, Shape.GetExtent(), Color, SDPG_World);
+		const FTransform WorldXform = ComposeWorldPlacement(SamplesCompSpace[Index], ComponentToWorld);
+		const FVector Location = WorldXform.GetLocation();
+
+		if (Index > 0)
+		{
+			// 세그먼트 스윕 볼륨. 회전은 시작 샘플 기준이라 DetectHitForSegment 가 실제로 스윕하는 볼륨과 같다.
+			OverdriveCombatDebug::DrawEditorShapeSweep(PDI, Shape, PreviousLocation, Location, PreviousRotation, ShapeColor);
+
+			// 앵커 중심을 잇는 궤적선. 셰이프 와이어에 묻히지 않도록 전면 레이어에 굵게 그린다.
+			PDI->DrawLine(PreviousLocation, Location, PathColor, SDPG_Foreground, SweepPathLineThickness);
+		}
+
+		PreviousLocation = Location;
+		PreviousRotation = WorldXform.GetRotation();
 	}
 }
 

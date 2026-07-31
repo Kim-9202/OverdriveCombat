@@ -25,9 +25,19 @@ Unreal Engine 5.8 플러그인. 애니메이션 기반 **히트 판정**과 GAS 
 | 노티파이 | 방식 |
 |---|---|
 | `OverdriveCombatAnimNotify_Attack` | 단발(Burst) — 해당 프레임에 한 번 판정 |
-| `OverdriveCombatAnimNotifyState_Attack` | 구간(Sweep) — 노티파이 구간 동안 이전 프레임 위치에서 현재 위치까지 스윕 |
+| `OverdriveCombatAnimNotifyState_Attack` | 구간(Sweep) — 에디터에서 베이크한 앵커 궤적을 애니메이션 시간에 맞춰 세그먼트 단위로 스윕 |
+
+![단발 노티파이 디테일 패널과 뷰포트](Docs/Images/AnimNotify_Attack_AnimEditor.png)
+
+*단발(Burst) — `Simple Shape`(Box) 판정 영역과 `Attack Origin` · `Impact Normal` 핸들이 뷰포트에 함께 표시된다.*
+
+![구간 노티파이 디테일 패널과 뷰포트](Docs/Images/AnimNotifyState_Attack_AnimEditor.png)
+
+*구간(Sweep) — `hand_r` 소켓에 붙인 Sphere가 노티파이 구간 전체에 걸쳐 베이크된 앵커 궤적(노란 선)으로 표시된다.*
 
 디텍터는 교체 가능한 Instanced 오브젝트다. 기본 제공은 `SimpleShape`(구/캡슐/박스)이며, 상속해 커스텀 판정을 만들 수 있다.
+
+Sweep 노티파이의 앵커 궤적은 런타임이 아니라 **에디터에서 미리 굽는다**. 디테일 패널의 `Cache Attack Keyframes` 버튼이 노티파이 구간을 `Sub Step Time`(초) 단위로 샘플링해 소켓의 컴포넌트 상대 트랜스폼을 저장한다. 애니메이션을 수정했다면 다시 눌러야 한다.
 
 같은 컴포넌트에 여러 번 맞으면 **공격 원점에 가장 가까운 히트**만 남긴다(가장 먼저 걸린 히트가 아니다).
 

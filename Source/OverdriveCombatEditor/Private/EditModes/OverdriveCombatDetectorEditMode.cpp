@@ -28,6 +28,13 @@ namespace
 	/** 방향 화살표 길이(월드 cm). Origin 마커(반지름 4)보다 충분히 길어야 집기 쉽다. */
 	constexpr float DirectionArrowLength = 40.0f;
 
+	/**
+	 * 화살표 시작점을 Origin 에서 띄우는 거리(월드 cm).
+	 * 화살표 밑동이 Origin 마커(구 반지름 4 + 십자선 8)를 덮으면 Direction 히트 프록시가
+	 * Origin 프록시를 가려 Origin 을 클릭할 수 없다. 십자선 끝의 2배로 띄운다.
+	 */
+	constexpr float DirectionArrowStartGap = 16.0f;
+
 	/** 화살촉 크기. */
 	constexpr float DirectionArrowHeadSize = 6.0f;
 
@@ -88,7 +95,7 @@ FOverdriveCombatImpactContext FOverdriveCombatDetectorEditMode::MakeImpactContex
 
 bool FOverdriveCombatDetectorEditMode::HasDirectionTarget() const
 {
-	// 화살표 기점이 Origin 이므로 Origin 대상도 있어야 한다.
+	// 화살표 기점을 Origin 에서 계산하므로 Origin 대상도 있어야 한다.
 	if (GetPreviewMeshComponent() == nullptr || !HasOriginTarget())
 	{
 		return false;
@@ -119,6 +126,12 @@ FVector FOverdriveCombatDetectorEditMode::GetDirectionWorld(const FOverdriveComb
 
 	// 컴포넌트 공간 방향을 월드로 회전(스케일 무시). 런타임 후처리(ComputeImpactNormal)와 같은 변환식이다.
 	return Context.ComponentToWorld.TransformVectorNoScale(Spec->Direction).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+}
+
+FVector FOverdriveCombatDetectorEditMode::GetDirectionArrowStart(const FOverdriveCombatImpactContext& Context) const
+{
+	// Origin 마커와 겹치지 않도록 방향으로 조금 띄운 지점. 화살표 그리기 / 라벨 / 기즈모 위치가 모두 여기를 기준으로 한다.
+	return Context.WorldOrigin + GetDirectionWorld(Context) * DirectionArrowStartGap;
 }
 
 bool FOverdriveCombatDetectorEditMode::HasActiveTarget() const
@@ -460,8 +473,9 @@ FVector FOverdriveCombatDetectorEditMode::GetWidgetLocation() const
 
 	if (SelectedHandle == EOverdriveCombatHandle::Direction && HasDirectionTarget())
 	{
-		// 화살표 기점(= Origin)이 회전 중심이다.
-		return MakeImpactContext().WorldOrigin;
+		// 기즈모도 화살표와 함께 띄운다. 회전은 델타 회전만 적용하므로(ApplyDirectionDelta)
+		// 위젯이 Origin 을 벗어나도 결과는 같고, 기즈모 원이 Origin 마커를 덮지 않는다.
+		return GetDirectionArrowStart(MakeImpactContext());
 	}
 
 	return GetShapeWorldTransform().GetLocation();
@@ -582,7 +596,8 @@ void FOverdriveCombatDetectorEditMode::Render(const FSceneView* View, FViewport*
 		}
 
 		// DrawDirectionalArrow 는 +X 방향으로 그리므로 X 축을 방향에 정렬한다.
-		const FMatrix ArrowToWorld = FRotationMatrix::MakeFromX(GetDirectionWorld(Context)) * FTranslationMatrix(Context.WorldOrigin);
+		// 기점은 Origin 에서 조금 띄운 지점이라 밑동이 Origin 마커의 클릭을 가리지 않는다.
+		const FMatrix ArrowToWorld = FRotationMatrix::MakeFromX(GetDirectionWorld(Context)) * FTranslationMatrix(GetDirectionArrowStart(Context));
 		DrawDirectionalArrow(PDI, ArrowToWorld, Color, DirectionArrowLength, DirectionArrowHeadSize, SDPG_Foreground, DirectionArrowThickness);
 
 		if (bHitTesting)
@@ -621,7 +636,7 @@ void FOverdriveCombatDetectorEditMode::DrawHUD(FEditorViewportClient* ViewportCl
 		const FOverdriveCombatImpactContext Context = MakeImpactContext();
 
 		// Origin 라벨과 겹치지 않도록 화살표 끝에 띄운다.
-		const FVector TipLocation = Context.WorldOrigin + GetDirectionWorld(Context) * DirectionArrowLength;
+		const FVector TipLocation = GetDirectionArrowStart(Context) + GetDirectionWorld(Context) * DirectionArrowLength;
 		DrawHandleLabel(Viewport, View, Canvas, TipLocation, DirectionLabel, bDirectionSelected ? DirectionSelectedColor : DirectionColor);
 	}
 }

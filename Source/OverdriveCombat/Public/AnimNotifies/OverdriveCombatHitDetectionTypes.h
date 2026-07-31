@@ -9,6 +9,7 @@
 #include "OverdriveCombatHitDetectionTypes.generated.h"
 
 class AActor;
+class FPrimitiveDrawInterface;
 class UPrimitiveComponent;
 class USkeletalMeshComponent;
 class UWorld;
@@ -128,5 +129,25 @@ namespace OverdriveCombatDebug
 {
 #if ENABLE_DRAW_DEBUG
 	OVERDRIVECOMBAT_API void DrawShapeSweep(const UWorld* World, const FCollisionShape& Shape, const FVector& Start, const FVector& End, const FQuat& Rotation, const TArray<FHitResult>& Hits, int32 OverrideDrawMode = -1);
+#endif
+
+#if WITH_EDITOR
+	/**
+	 * 콜리전 셰이프 종류에 맞는 와이어프레임을 한 위치에 그린다.
+	 *
+	 * 위 DrawShapeSweep 이 라인 배처(수명 있는 적재)를 쓰는 것과 달리 PDI 이미디어트 드로우다.
+	 * 매 프레임 다시 그리는 에디트 모드 Render 경로가 쓴다.
+	 */
+	OVERDRIVECOMBAT_API void DrawEditorShapeAt(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Location, const FQuat& Rotation, const FLinearColor& Color);
+
+	/**
+	 * 스윕 볼륨을 런타임 디버그(KismetTraceUtils)와 같은 모양으로 그린다:
+	 * 구 = 전 구간을 덮는 캡슐 하나(DrawDebugSweptSphere), 캡슐 = 양 끝 + 중심 연결선(DrawDebugCapsuleTraceMulti),
+	 * 박스 = 양 끝 + 꼭짓점 8개 연결선(DrawDebugSweptBox). 뷰포트 와이어와 PIE 디버그가 같은 볼륨으로 읽힌다.
+	 *
+	 * Start == End 면 스윕 방향이 없어 실루엣이 성립하지 않으므로 셰이프 하나로 폴백한다.
+	 * 구 스윕은 방향으로 늘인 캡슐이라 Rotation 을 쓰지 않는다.
+	 */
+	OVERDRIVECOMBAT_API void DrawEditorShapeSweep(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Start, const FVector& End, const FQuat& Rotation, const FLinearColor& Color);
 #endif
 }

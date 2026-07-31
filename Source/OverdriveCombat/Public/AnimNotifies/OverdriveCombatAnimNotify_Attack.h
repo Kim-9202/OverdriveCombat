@@ -17,8 +17,7 @@ class UOverdriveCombatHitBurstDetector;
  * 노티파이는 채워진 FGameplayAbilityTargetDataHandle 로 공격자에게 GameplayEvent 만 보낸다.
  * 서버 권위에서만 동작한다.
  *
- * 애님 에디터 프리뷰에서도 발화해 판정과 디버그 드로우(od.Combat.DrawHitDetection)까지 수행하지만,
- * 프리뷰 액터에는 ASC 가 없으므로 GameplayEvent 전송만 건너뛴다.
+ * 애님 에디터 프리뷰에서는 물리 판정도 이벤트 전송도 하지 않고 셰이프만 디버그 드로우한다(od.Combat.DrawHitDetection).
  *
  * 프레임 간 상태가 전혀 없으므로 노티파이 인스턴스 공유 문제에서 자유롭다.
  */
@@ -57,7 +56,9 @@ public:
 	static FName GetImpactNormalSpecPropertyName();
 
 	virtual bool CanBePlaced(UAnimSequenceBase* Animation) const override;
-	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+
+	/** 로드·저장 시점의 설정 점검 훅. 디텍터가 비어 있으면 AssetCheck 메시지 로그로 경고한다. */
+	virtual void ValidateAssociatedAssets() override;
 #endif
 
 private:
@@ -65,7 +66,7 @@ private:
 	UPROPERTY(EditAnywhere, Instanced, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UOverdriveCombatHitBurstDetector> HitDetector;
 
-	/** 공격자에게 전송할 GameplayEvent 태그. 비워 두면 Combat.Event.Hit 을 쓴다. */
+	/** 공격자에게 전송할 GameplayEvent 태그. 기본값은 Combat.Event.Hit 이고, 지워서 비우면 전송 시 그 기본 태그로 대체된다. */
 	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event"))
 	FGameplayTag EventTag;
 

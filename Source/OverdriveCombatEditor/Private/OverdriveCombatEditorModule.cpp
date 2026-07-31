@@ -3,6 +3,7 @@
 
 #include "OverdriveCombatEditorModule.h"
 
+#include "DetailCustomizations/OverdriveCombatCacheKeyframesButtonCustomization.h"
 #include "EditModes/OverdriveCombatHitBurstDetectorEditMode.h"
 #include "EditModes/OverdriveCombatSweepDetectorEditMode.h"
 
@@ -19,6 +20,7 @@
 #include "EditorModeRegistry.h"
 #include "IAnimationEditor.h"
 #include "Misc/CoreDelegates.h"
+#include "PropertyEditorModule.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Textures/SlateIcon.h"
 
@@ -28,6 +30,9 @@ namespace
 {
 	/** IAssetEditorInstance::GetEditorName 이 돌려주는 애니메이션 에디터 툴킷 이름. */
 	const FName GAnimationEditorName(TEXT("AnimationEditor"));
+
+	/** 셧다운 시점에는 리플렉션 조회가 안전하지 않으므로 구조체 이름을 상수로 둔다. */
+	const FName GCacheKeyframesButtonStructName(TEXT("OverdriveCombatCacheKeyframesButton"));
 }
 
 EAssetTypeCategories::Type FOverdriveCombatEditorModule::OverdrivePluginsCategory = EAssetTypeCategories::Misc;
@@ -58,6 +63,12 @@ void FOverdriveCombatEditorModule::StartupModule()
 		LOCTEXT("SweepDetectorEditModeName", "Overdrive Combat Sweep Detector"),
 		FSlateIcon(),
 		false);
+
+	// 몽타주 에디터의 노티파이 디테일에는 CallInEditor 버튼이 뜨지 않으므로, 자리표시자 구조체를 버튼으로 그린다.
+	FPropertyEditorModule& PropertyModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	PropertyModule.RegisterCustomPropertyTypeLayout(
+		GCacheKeyframesButtonStructName,
+		FOnGetPropertyTypeCustomizationInstance::CreateStatic(&FOverdriveCombatCacheKeyframesButtonCustomization::MakeInstance));
 
 	// 에디터 모듈은 GEditor 생성 전에 로드될 수 있다. 준비돼 있으면 즉시, 아니면 엔진 초기화 후에 바인딩한다.
 	if (GEditor != nullptr)
@@ -90,6 +101,13 @@ void FOverdriveCombatEditorModule::ShutdownModule()
 				}
 			}
 		}
+	}
+
+	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
+	{
+		FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+		PropertyModule.UnregisterCustomPropertyTypeLayout(GCacheKeyframesButtonStructName);
+		PropertyModule.NotifyCustomizationModuleChanged();
 	}
 
 	FEditorModeRegistry::Get().UnregisterMode(FOverdriveCombatHitBurstDetectorEditMode::ModeID);

@@ -17,7 +17,7 @@ UOverdriveCombatAbilityTask_WaitAttackTarget* UOverdriveCombatAbilityTask_WaitAt
 
 	NewTask->bOnlyTriggerOnce = bOnlyTriggerOnce;
 	
-	NewTask->EventTag = EventTag.IsValid() ? EventTag : OverdriveCombatTags::Combat_Event_Hit.GetTag();
+	NewTask->EventTag = EventTag.IsValid() ? EventTag : OverdriveCombatTags::Combat_Event_Hit;
 
 	return NewTask;
 }

@@ -11,10 +11,6 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 
-#if WITH_EDITOR
-#include "PrimitiveDrawingUtils.h"
-#endif
-
 void UOverdriveCombatHitBurstDetector_SimpleShape::CollectHits(const FOverdriveCombatHitBurstDetectorContext& Context, TArray<FHitResult>& OutHits) const
 {
 	const UWorld* World = Context.MeshComp->GetWorld();
@@ -103,72 +99,6 @@ void UOverdriveCombatHitBurstDetector_SimpleShape::DrawDebugDetection(const FOve
 #endif
 
 #if WITH_EDITOR
-namespace
-{
-	/** 콜리전 셰이프 종류에 맞는 와이어프레임을 한 위치에 그린다. */
-	void DrawEditorShapeAt(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Location, const FQuat& Rotation, const FLinearColor& Color)
-	{
-		const FVector AxisX = Rotation.GetAxisX();
-		const FVector AxisY = Rotation.GetAxisY();
-		const FVector AxisZ = Rotation.GetAxisZ();
-
-		if (Shape.IsSphere())
-		{
-			DrawWireSphere(PDI, Location, Color, Shape.GetSphereRadius(), 16, SDPG_World);
-		}
-		else if (Shape.IsCapsule())
-		{
-			DrawWireCapsule(PDI, Location, AxisX, AxisY, AxisZ, Color, Shape.GetCapsuleRadius(), Shape.GetCapsuleHalfHeight(), 16, SDPG_World);
-		}
-		else if (Shape.IsBox())
-		{
-			DrawOrientedWireBox(PDI, Location, AxisX, AxisY, AxisZ, Shape.GetExtent(), Color, SDPG_World);
-		}
-	}
-
-	/**
-	 * 스윕 볼륨을 런타임 디버그(KismetTraceUtils)와 같은 모양으로 그린다:
-	 * 구 = 전 구간을 덮는 캡슐 하나(DrawDebugSweptSphere), 캡슐 = 양 끝 + 중심 연결선(DrawDebugCapsuleTraceMulti),
-	 * 박스 = 양 끝 + 꼭짓점 8개 연결선(DrawDebugSweptBox). 뷰포트 와이어와 PIE 디버그가 같은 볼륨으로 읽힌다.
-	 */
-	void DrawEditorShapeSweep(FPrimitiveDrawInterface* PDI, const FCollisionShape& Shape, const FVector& Start, const FVector& End, const FQuat& Rotation, const FLinearColor& Color)
-	{
-		const FVector TraceVec = End - Start;
-
-		if (Shape.IsSphere())
-		{
-			// 구 스윕의 실제 판정 볼륨 = 스윕 방향으로 늘인 캡슐. DrawWireCapsule 의 HalfHeight 는
-			// 캡 포함 전체 절반 높이라 DrawDebugCapsule 과 의미가 같다(내부에서 radius 차감).
-			const FVector Center = Start + TraceVec * 0.5f;
-			const double HalfHeight = TraceVec.Size() * 0.5 + Shape.GetSphereRadius();
-			const FMatrix SweepMatrix = FRotationMatrix::MakeFromZ(TraceVec);
-			DrawWireCapsule(PDI, Center, SweepMatrix.GetUnitAxis(EAxis::X), SweepMatrix.GetUnitAxis(EAxis::Y), SweepMatrix.GetUnitAxis(EAxis::Z), Color, Shape.GetSphereRadius(), HalfHeight, 16, SDPG_World);
-			return;
-		}
-
-		DrawEditorShapeAt(PDI, Shape, Start, Rotation, Color);
-		DrawEditorShapeAt(PDI, Shape, End, Rotation, Color);
-
-		if (Shape.IsCapsule())
-		{
-			PDI->DrawLine(Start, End, Color, SDPG_World);
-			return;
-		}
-
-		// 박스: 시작 박스의 꼭짓점 8개를 스윕 벡터만큼 연결한다.
-		const FVector HalfSize = Shape.GetExtent();
-		for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
-		{
-			const FVector SignedExtent(
-				(CornerIndex & 1) ? HalfSize.X : -HalfSize.X,
-				(CornerIndex & 2) ? HalfSize.Y : -HalfSize.Y,
-				(CornerIndex & 4) ? HalfSize.Z : -HalfSize.Z);
-			const FVector Corner = Start + Rotation.RotateVector(SignedExtent);
-			PDI->DrawLine(Corner, Corner + TraceVec, Color, SDPG_World);
-		}
-	}
-}
-
 void UOverdriveCombatHitBurstDetector_SimpleShape::DrawEditorShapes(FPrimitiveDrawInterface* PDI, const USkeletalMeshComponent* MeshComp, const FLinearColor& Color) const
 {
 	if (PDI == nullptr)
@@ -185,14 +115,8 @@ void UOverdriveCombatHitBurstDetector_SimpleShape::DrawEditorShapes(FPrimitiveDr
 		const FVector End = BaseTransform.TransformPosition(Entry.EndLocation);
 		const FQuat ShapeRotation = BaseTransform.GetRotation() * Entry.Rotation.Quaternion();
 
-		// 길이 0 스윕이면 제자리 판정 — 셰이프 하나만 그린다.
-		if (End.Equals(Start))
-		{
-			DrawEditorShapeAt(PDI, Shape, Start, ShapeRotation, Color);
-			continue;
-		}
-
-		DrawEditorShapeSweep(PDI, Shape, Start, End, ShapeRotation, Color);
+		// 길이 0 스윕(제자리 판정)은 헬퍼가 셰이프 하나로 폴백한다.
+		OverdriveCombatDebug::DrawEditorShapeSweep(PDI, Shape, Start, End, ShapeRotation, Color);
 	}
 }
 #endif
