@@ -44,9 +44,8 @@ FGameplayTag UOverdriveCombatLibrary::GetAttackTypeTagFromTargetData(const FGame
 		return FGameplayTag();
 	}
 
-	const UScriptStruct* ScriptStruct = TargetData->GetScriptStruct();
-
-	if (ScriptStruct == nullptr || !ScriptStruct->IsChildOf(FOverdriveCombatTargetData_AttackHit::StaticStruct()))
+	// 정확 일치 — 이 구조체는 final 이라 파생이 없고, 나머지 소비 측도 같은 기준으로 고른다.
+	if (TargetData->GetScriptStruct() != FOverdriveCombatTargetData_AttackHit::StaticStruct())
 	{
 		return FGameplayTag();
 	}

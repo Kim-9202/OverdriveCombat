@@ -7,7 +7,7 @@
 
 void UOverdriveCombatDamageExtender::ExtendDamage(const FGameplayEffectCustomExecutionParameters& ExecutionParams, FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const
 {
-	// Restore the previous cache afterwards so a reentrant Extend (e.g. applying a GE inside Extend) keeps the outer call valid.
+	// 끝나고 이전 캐시로 되돌린다. Extend 안에서 또 GE 를 적용하는 식으로 재진입해도 바깥 호출이 계속 유효하도록.
 	const FGameplayEffectCustomExecutionParameters* PrevExecutionParams = CachedExecutionParams;
 	FGameplayEffectCustomExecutionOutput* PrevExecutionOutput = CachedExecutionOutput;
 

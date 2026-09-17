@@ -15,7 +15,8 @@ class UOverdriveCombatHitBurstDetector;
  *
  * 그 순간의 포즈에서 디텍터가 히트 판정과 TargetData 패킹을 수행하고,
  * 노티파이는 채워진 FGameplayAbilityTargetDataHandle 로 공격자에게 GameplayEvent 만 보낸다.
- * 서버 권위에서만 동작한다.
+ * 어느 머신에서 판정·전송할지는 NetPolicy 가 정한다(기본: 서버 + 소유 클라이언트).
+ * GameplayEvent 는 복제되지 않으므로 발화한 머신에서 로컬로만 전달된다.
  *
  * 애님 에디터 프리뷰에서는 물리 판정도 이벤트 전송도 하지 않고 셰이프만 디버그 드로우한다(od.Combat.DrawHitDetection).
  *
@@ -67,8 +68,12 @@ private:
 	TObjectPtr<UOverdriveCombatHitBurstDetector> HitDetector;
 
 	/** 공격자에게 전송할 GameplayEvent 태그. 기본값은 Combat.Event.Hit 이고, 지워서 비우면 전송 시 그 기본 태그로 대체된다. */
-	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event"))
+	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event.Hit"))
 	FGameplayTag EventTag;
+
+	/** 이 노티파이가 어느 머신에서 판정·전송을 수행할지. */
+	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
+	EOverdriveCombatNotifyNetPolicy NetPolicy = EOverdriveCombatNotifyNetPolicy::AuthorityAndAutonomous;
 
 	/** 컴포넌트 상대 공격 원점. 기즈모로 편집하며, 히트마다 TargetData 에 실려 넉백/파동 중심으로 쓰인다. */
 	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))

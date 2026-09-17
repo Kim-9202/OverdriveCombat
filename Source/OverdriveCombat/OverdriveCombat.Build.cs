@@ -45,7 +45,6 @@ public class OverdriveCombat : ModuleRules
 			{
 				"Slate",
 				"SlateCore",
-                "ModularGameplay",
 				// FVector_NetQuantize10::NetSerialize 가 쓰는 UE::Net::Write/ReadQuantizedVector 심볼(TargetData Origin).
 				"NetCore"
 				// ... add private dependencies that you statically link with here ...

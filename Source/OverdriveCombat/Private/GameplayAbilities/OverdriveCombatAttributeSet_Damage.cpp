@@ -64,15 +64,13 @@ void UOverdriveCombatAttributeSet_Damage::PostDamageAction(float InDamage, const
 	{
 		HitEventData.Instigator = SourceASC->GetAvatarActor();
 		HitEventData.InstigatorTags = SourceASC->GetOwnedGameplayTags();
-	}
 
-	if (SourceASC)
-	{
 		FGameplayEventData OnHitEventData = HitEventData;
 
+		// 공격자 쪽 수신 어빌리티가 컨텍스트를 건드려도 아래 타겟 쪽 이벤트가 쓰는 원본이 오염되지 않도록 복제해 넘긴다.
 		OnHitEventData.ContextHandle = OnHitEventData.ContextHandle.Duplicate();
 
-		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(SourceASC->GetOwnerActor(), OverdriveCombatTags::Combat_Event_OnHit, HitEventData);
+		UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(SourceASC->GetOwnerActor(), OverdriveCombatTags::Combat_Event_OnHit, OnHitEventData);
 	}
 
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(TargetASC.GetOwnerActor(), OverdriveCombatTags::Combat_Event_Damage, HitEventData);

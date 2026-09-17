@@ -2,13 +2,11 @@
 
 
 #include "Components/OverdriveCombatComponent.h"
-#include "AbilitySystemGlobals.h"
-#include "OverdriveCombatTags.h"
-#include "Components/SkeletalMeshComponent.h"
+#include "AbilitySystemFinders/OverdriveCombatAbilitySystemFinder.h"
+#include "AbilitySystemFinders/OverdriveCombatAbilitySystemFinder_Owner.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffect.h"
 #include "Misc/DataValidation.h"
-#include "OverdriveCombatDeveloperSettings.h"
 #include "OverdriveCombatDamageApplier.h"
 #include "OverdriveCombatDamageExtender.h"
 #include "GameplayAbilities/OverdriveCombatBarrier.h"
@@ -20,6 +18,8 @@ UOverdriveCombatComponent::UOverdriveCombatComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = false;
+
+	AbilitySystemFinderClass = UOverdriveCombatAbilitySystemFinder_Owner::StaticClass();
 }
 
 
@@ -29,7 +29,7 @@ void UOverdriveCombatComponent::BeginPlay()
 	Super::BeginPlay();
 
 	// ...
-	LinkAbilitySystem();
+	InitializeAbilitySystem();
 
 	// Applier 는 AddAttributeModifier 에서 이 컴포넌트를 통해 대상 ASC 를 찾는다.
 	// 기본 Applier 도 반드시 연결해야 데미지가 유실되지 않는다.
@@ -46,6 +46,38 @@ void UOverdriveCombatComponent::BeginPlay()
 
 void UOverdriveCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	DestroyAbilitySystemFinder();
+
+	// 아래 정리는 전부 대상 ASC 를 거치므로 링크를 끊기 전에 끝낸다.
+	// ASC 가 PlayerState 처럼 이 컴포넌트보다 오래 사는 액터에 있으면, 안 걷어낸 GE 가 그대로 남는다.
+	ClearHitStop();
+
+	// RemoveBarrier 가 UnregisterBarrier 로 ActiveBarriers 를 건드리므로 스냅샷을 순회한다.
+	const TArray<TObjectPtr<UOverdriveCombatBarrier>> BarriersSnapshot = ActiveBarriers;
+	for (UOverdriveCombatBarrier* Barrier : BarriersSnapshot)
+	{
+		if (IsValid(Barrier))
+		{
+			Barrier->RemoveBarrier();
+		}
+	}
+	ActiveBarriers.Reset();
+
+	// 배리어가 들고 있던 Applier 는 위 RemoveBarrier 에서 이미 내려갔다. 남은 것은 StartOptional 계열이다.
+	for (const TWeakObjectPtr<UOverdriveCombatDamageApplier>& OptionalApplier : OptionalDamageAppliers)
+	{
+		if (UOverdriveCombatDamageApplier* Applier = OptionalApplier.Get())
+		{
+			Applier->UnlinkCombatComponent();
+		}
+	}
+	OptionalDamageAppliers.Reset();
+
+	if (DefaultDamageApplier != nullptr)
+	{
+		DefaultDamageApplier->UnlinkCombatComponent();
+	}
+
 	UnlinkAbilitySystem();
 
 	Super::EndPlay(EndPlayReason);
@@ -66,21 +98,61 @@ EDataValidationResult UOverdriveCombatComponent::IsDataValid(FDataValidationCont
 }
 #endif
 
-void UOverdriveCombatComponent::LinkAbilitySystem()
+void UOverdriveCombatComponent::SetAbilitySystemFinderClass(TSubclassOf<UOverdriveCombatAbilitySystemFinder> InFinderClass)
 {
-	AActor* OwnerActor = GetOwner();
-	if (OwnerActor == nullptr)
+	if (!ensure(InFinderClass))
 	{
-		UnlinkAbilitySystem();
 		return;
 	}
 
-	UAbilitySystemComponent* NewASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OwnerActor);
-	if (WeakASC != NewASC)
+	AbilitySystemFinderClass = InFinderClass;
+}
+
+void UOverdriveCombatComponent::InitializeAbilitySystem()
+{
+	if (!ensure(AbilitySystemFinderClass))
+	{
+		return;
+	}
+
+	AbilitySystemFinder = NewObject<UOverdriveCombatAbilitySystemFinder>(this, AbilitySystemFinderClass);
+	AbilitySystemFinder->WeakOwnerComponent = this;
+	AbilitySystemFinder->RetryPeriod = AbilitySystemFindPeriod;
+	AbilitySystemFinder->MaxAttemptCount = AbilitySystemFindMaxCount;
+	AbilitySystemFinder->OnFound.BindUObject(this, &UOverdriveCombatComponent::HandleAbilitySystemFound);
+	AbilitySystemFinder->OnFailed.BindUObject(this, &UOverdriveCombatComponent::HandleAbilitySystemFindFailed);
+
+	AbilitySystemFinder->StartFind();
+}
+
+void UOverdriveCombatComponent::HandleAbilitySystemFound(UAbilitySystemComponent* FoundAbilitySystem)
+{
+	DestroyAbilitySystemFinder();
+
+	if (WeakASC != FoundAbilitySystem)
 	{
 		UnlinkAbilitySystem();
-		WeakASC = NewASC;
+		WeakASC = FoundAbilitySystem;
 	}
+}
+
+void UOverdriveCombatComponent::HandleAbilitySystemFindFailed()
+{
+	DestroyAbilitySystemFinder();
+
+	ensureMsgf(false, TEXT("%hs::Can't Find AbilitySystem."), __FUNCTION__);
+}
+
+void UOverdriveCombatComponent::DestroyAbilitySystemFinder()
+{
+	if (!IsValid(AbilitySystemFinder))
+	{
+		return;
+	}
+
+	AbilitySystemFinder->StopFind();
+	AbilitySystemFinder->MarkAsGarbage();
+	AbilitySystemFinder = nullptr;
 }
 
 void UOverdriveCombatComponent::UnlinkAbilitySystem()
@@ -136,7 +208,10 @@ void UOverdriveCombatComponent::AddOptionalDamageApplier(UOverdriveCombatDamageA
 	}
 
 	NewApplier->LinkCombatComponent(this);
-	OptionalDamageAppliers.Add(NewApplier);
+
+	// 중복 등록되면 ApplyDamage 파이프라인에서 같은 Applier 가 두 번 돈다.
+	// 제거는 Remove 가 일치 항목을 전부 걷어내므로 중복을 참조 카운트로 쓸 수도 없다.
+	OptionalDamageAppliers.AddUnique(NewApplier);
 }
 
 void UOverdriveCombatComponent::RemoveOptionalDamageApplier(UOverdriveCombatDamageApplier* InApplier)

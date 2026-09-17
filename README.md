@@ -54,11 +54,53 @@ Sweep 노티파이의 앵커 궤적은 런타임이 아니라 **에디터에서 
 
 여기 없는 규칙이 필요하면 이벤트를 받은 어빌리티가 `TargetData`의 `HitResult`와 `GetOrigin()`으로 직접 계산한다.
 
+### 히트 이벤트 페이로드
+
+두 노티파이 모두 같은 경로로 전송하므로 수신 어빌리티가 받는 내용이 동일하다.
+
+| 필드 | 내용 |
+|---|---|
+| `TargetData` | 히트마다 하나씩. 각 항목에 `AttackTypeTag`와 공격 원점이 실린다 |
+| `Target` | 단일 히트일 때만 피격 액터, 다중 히트면 공격자 |
+| `Instigator` / `InstigatorTags` | 공격자와 그 시점의 소유 태그 |
+| `ContextHandle` | 공격자 ASC로 만든 EffectContext(첫 히트의 `HitResult` 포함) — 데미지 GE로 그대로 넘길 수 있다 |
+
+다중 히트의 진실은 항상 `TargetData`에 있다. `Target` 하나만 보고 처리하면 안 된다.
+
+### 네트워크
+
+GameplayEvent는 **복제되지 않는다.** 발송한 머신에서 로컬로만 전달된다. 그런데 애님 노티파이는 몽타주를 재생하는 모든 머신에서 발화하므로, 제한이 없으면 접속자 수만큼 트레이스가 돈다.
+
+노티파이의 `Net Policy`로 어느 머신에서 판정·전송할지 고른다.
+
+| 정책 | 발화 머신 |
+|---|---|
+| `Authority + Autonomous` (기본) | 서버 + 자기 캐릭터를 조종 중인 클라이언트 |
+| `Authority Only` | 서버만 |
+| `All` | 전부 — 다른 플레이어 공격에도 내 화면에서 로컬 연출을 걸 때 |
+
+기본값은 클라이언트 전용 로직(로컬 타격감·연출)을 돌릴 여지를 남기면서, 다른 클라이언트의 복제본(SimulatedProxy)에서 도는 무의미한 트레이스만 걷어낸다. 스탠드얼론·싱글플레이는 전부 권위이므로 어떤 정책에서도 정상 발화한다.
+
+권위 판정은 전송이 아니라 **판정 앞**에서 이뤄진다 — 제외된 머신은 트레이스 자체를 돌리지 않는다.
+
 ### 에디터 뷰포트 기즈모
 
 애니메이션 에디터에서 노티파이를 선택하면 판정 영역(반지름·오프셋·Fixed Direction)을 뷰포트 핸들로 직접 조작할 수 있다. `IPersonaEditMode` 기반이다.
 
 > 참고: `MakeEditWidget` 메타는 레벨 에디터 전용이라 노티파이에는 동작하지 않는다. 그래서 전용 에디트 모드를 구현했다.
+
+### AbilitySystem 연결
+
+`UOverdriveCombatComponent`는 대상 ASC를 **탐색 전략**으로 찾는다. ASC가 PlayerState처럼 폰보다 늦게 확정되는 구성에서는 `BeginPlay` 시점의 1회 조회가 반드시 실패하기 때문이다(스폰 → BeginPlay → Possess 순서라 그 시점 폰의 PlayerState는 아직 null).
+
+| 전략 | 조회 대상 |
+|---|---|
+| `Find From Owner` (기본) | 컴포넌트 오너 액터 |
+| `Find From PlayerState` | 오너가 Pawn이면 그 PlayerState, Controller면 그 PlayerState, 오너 자신이 PlayerState면 그대로 |
+
+찾을 때까지 `Ability System Find Period`(기본 0.5초) 간격으로 `Ability System Find Max Count`(기본 20회)까지 재시도한다. 전부 실패하면 `ensure`로 알린다.
+
+전략은 `UOverdriveCombatAbilitySystemFinder`를 상속해 추가할 수 있다. `Blueprintable`이라 BP로도 만들 수 있고, `FindAbilitySystem`만 구현하면 된다. 코드에서 바꿀 때는 소유 액터 **생성자**에서 `SetAbilitySystemFinderClass`를 부른다 — `BeginPlay` 이후 호출은 효과가 없다.
 
 ### 데미지 파이프라인
 
@@ -79,11 +121,13 @@ UOverdriveCombatComponent::ApplyDamage
 
 `Spec`을 통해 GE의 에셋 태그·SetByCaller·EffectContext를 모두 볼 수 있어, 공격 유형별로 다르게 반응할 수 있다. 단 `Spec`은 호출 구간에서만 유효하니 멤버로 보관하면 안 된다.
 
+배리어용 Applier는 배리어가 자신을 등록할 때 내부적으로 만든다. Outer가 반드시 배리어여야 해서 디테일 패널 목록과 BP 부모 목록에는 노출하지 않는다.
+
 ### 배리어
 
 `UOverdriveCombatBarrier` — 데미지 파이프라인 앞단에 끼어드는 보호막. GameplayEffect로 지속시간을 관리한다.
 
-- 파괴 시(`OnBreakBarrier`) / 만료 시(`OnBarrierDurationEnd`) 델리게이트 — C++·BP 양쪽 제공
+- 파괴 시 / 만료 시 델리게이트 — C++는 `GetOnBreakBarrierDelegate()` · `GetOnBarrierDurationEndDelegate()`로 받아 `Add`, BP는 `OnBreakBarrierDynamic` · `OnBarrierDurationEndDynamic`에 바인딩. 둘 다 멀티캐스트라 리스너를 여럿 붙일 수 있다
 - 수명은 대상 `UOverdriveCombatComponent`의 강참조(`RegisterBarrier`)가 보증한다. Outer 체인이나 약참조는 GC를 막지 못한다
 - 제거는 `MarkAsGarbage` 대신 등록 해제로 처리한다 — 외부가 들고 있는 참조를 밑에서 죽이지 않기 위함
 
@@ -99,14 +143,14 @@ UOverdriveCombatComponent::ApplyDamage
 
 - `UOverdriveCombatComponent::ApplyHitStop` — GE 기반 타격 정지
 - `UOverdriveCombatDamageExtender` — 데미지 Execution 단계에 계산을 얹는 확장점
-- `FOverdriveCombatTargetData_AttackHit` — 네트워크 직렬화되는 히트 TargetData
+- `FOverdriveCombatTargetData_AttackHit` — 네트워크 직렬화되는 히트 TargetData. `final`이다(소비 측이 전부 정확 타입 일치로 골라내므로 파생은 어디서도 걸러진다). 데이터를 더 실어야 하면 파생 대신 필드를 추가한다
 - `UOverdriveCombatAbilityTask_WaitAttackTarget` — 히트 이벤트 대기 태스크
 - 콘솔 변수로 판정 디버그 드로우
 
 ## 요구 사항
 
 - Unreal Engine **5.8**
-- 엔진 플러그인: `GameplayAbilities`, `ModularGameplay`
+- 엔진 플러그인: `GameplayAbilities`
 
 다른 Overdrive 플러그인에는 의존하지 않는다.
 

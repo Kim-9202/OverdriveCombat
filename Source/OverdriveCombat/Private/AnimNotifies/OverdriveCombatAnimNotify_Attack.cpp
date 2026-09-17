@@ -12,11 +12,6 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "OverdriveCombatTags.h"
-#include "Abilities/GameplayAbilityTypes.h"
-
-#include "AbilitySystemBlueprintLibrary.h"
-#include "AbilitySystemGlobals.h"
-#include "AbilitySystemComponent.h"
 
 #if WITH_EDITOR
 #include "Logging/MessageLog.h"
@@ -63,6 +58,13 @@ void UOverdriveCombatAnimNotify_Attack::Notify(USkeletalMeshComponent* MeshComp,
 	}
 #endif
 
+	// 프리뷰 가드 뒤에 둔다 — 프리뷰 월드도 오너가 있고 권위로 잡히므로 순서를 뒤집으면 프리뷰 드로우가 정책에 걸린다.
+	// 전송이 아니라 판정 앞에서 막아, 제외된 머신에서는 스윕 자체가 돌지 않는다.
+	if (!OverdriveCombatHitEvents::ShouldFireForNetPolicy(InstigatorActor, NetPolicy))
+	{
+		return;
+	}
+
 	FGameplayAbilityTargetDataHandle TargetDataHandle;
 	if (HitDetector->DetectHit(Context, TargetDataHandle) <= 0)
 	{
@@ -75,23 +77,21 @@ void UOverdriveCombatAnimNotify_Attack::Notify(USkeletalMeshComponent* MeshComp,
 	ImpactContext.ComponentToWorld = ComponentToWorld;
 	OverdriveCombatHitEvents::ApplyImpactPostProcess(TargetDataHandle, ImpactContext, ImpactNormalSpec);
 
-	// 노티파이 인스턴스는 애님 애셋당 하나이고 여러 메시가 공유하므로, 태그가 비었어도 멤버를 고치지 않고 지역으로 대체한다.
-	const FGameplayTag ResolvedEventTag = EventTag.IsValid() ? EventTag : OverdriveCombatTags::Combat_Event_Hit;
-
-	FGameplayEventData Payload;
-	Payload.EventTag = ResolvedEventTag;
-	Payload.Instigator = InstigatorActor;
-
-	Payload.TargetData = TargetDataHandle;
-
-	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(InstigatorActor, ResolvedEventTag, Payload);
+	// 전송은 구간 노티파이와 같은 공용 경로를 쓴다. 여기서 페이로드를 다시 조립하면
+	// Target / InstigatorTags / EffectContext(HitResult 포함)가 빠져 두 노티파이의 수신 결과가 갈린다.
+	// EventTag 를 값으로 받으므로 빈 태그 대체도 공유 멤버를 건드리지 않는다.
+	OverdriveCombatHitEvents::SendHitEvent(InstigatorActor, TargetDataHandle, EventTag);
 }
 
 FString UOverdriveCombatAnimNotify_Attack::GetNotifyName_Implementation() const
 {
 	if (HitDetector != nullptr)
 	{
+#if WITH_EDITOR
 		return FString::Printf(TEXT("Attack: %s    "), *HitDetector->GetDetectorDisplayName());
+#else
+		return TEXT("Attack    ");
+#endif
 	}
 
 	return TEXT("Attack (No Detector)    ");

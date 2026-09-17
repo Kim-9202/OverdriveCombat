@@ -79,6 +79,29 @@ namespace
 
 namespace OverdriveCombatHitEvents
 {
+	bool ShouldFireForNetPolicy(const AActor* OwnerActor, EOverdriveCombatNotifyNetPolicy Policy)
+	{
+		if (Policy == EOverdriveCombatNotifyNetPolicy::All)
+		{
+			return true;
+		}
+
+		if (OwnerActor == nullptr)
+		{
+			return false;
+		}
+
+		const ENetRole LocalRole = OwnerActor->GetLocalRole();
+
+		// 스탠드얼론·데디/리슨 서버·복제하지 않는 액터가 모두 여기에 해당한다.
+		if (LocalRole == ROLE_Authority)
+		{
+			return true;
+		}
+
+		return (Policy == EOverdriveCombatNotifyNetPolicy::AuthorityAndAutonomous) && (LocalRole == ROLE_AutonomousProxy);
+	}
+
 	void SendHitEvent(AActor* InstigatorActor, const FGameplayAbilityTargetDataHandle& TargetData, FGameplayTag EventTag)
 	{
 		if (InstigatorActor == nullptr || TargetData.Num() == 0)

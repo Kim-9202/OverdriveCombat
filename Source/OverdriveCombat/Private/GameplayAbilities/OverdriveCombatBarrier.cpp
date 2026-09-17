@@ -109,13 +109,13 @@ bool UOverdriveCombatBarrier::ApplyBarrier(UOverdriveCombatComponent* TargetOCCo
 		return false;
 	}
 
-	WeakASC = TargetOCCombat->GetLinkedAbilitySystem();
+	WeakCombat = TargetOCCombat;
+
+	WeakASC = WeakCombat->GetLinkedAbilitySystem();
 	if (!WeakASC.IsValid())
 	{
 		return false;
 	}
-
-	WeakCombat = TargetOCCombat;
 
 	bool bFound = false;
 	const float PrevBarrier = WeakASC->GetGameplayAttributeValue(UOverdriveCombatAttributeSet_Barrier::GetBarrierPointAttribute(), bFound);

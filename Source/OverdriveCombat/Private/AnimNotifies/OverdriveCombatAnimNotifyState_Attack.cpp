@@ -146,6 +146,15 @@ void UOverdriveCombatAnimNotifyState_Attack::ProcessDueSegments(USkeletalMeshCom
 		return;
 	}
 
+	// 프리뷰 가드 뒤에 둔다 — 프리뷰 월드도 권위로 잡히므로 순서를 뒤집으면 프리뷰 드로우가 정책에 걸린다.
+	// 건너뛸 때도 세그먼트를 소비 처리해야 매 틱 같은 구간을 다시 평가하지 않는다(위 프리뷰 분기와 같은 형태).
+	if (!OverdriveCombatHitEvents::ShouldFireForNetPolicy(InstigatorActor, NetPolicy))
+	{
+		State.NextSegment = DueEnd;
+
+		return;
+	}
+
 	const FVector WorldOrigin = ComponentToWorld.TransformPosition(AttackOrigin);
 
 	// 여러 세그먼트가 같은 컴포넌트를 맞추면 가장 빠른 히트가 아니라 Origin 최근접 히트를 이번 묶음 최적맵에 모은다.

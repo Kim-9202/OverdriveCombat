@@ -47,7 +47,9 @@ struct FOverdriveCombatCacheKeyframesButton
  * 인접 키프레임을 현재 컴포넌트 트랜스폼으로 스윕하고, 그 틱에 나온 신규 히트를 모아 곧바로 GameplayEvent 로
  * 전송한다(틱당 1회). 몽타주 시간을 그대로 쓰므로 PlayRate·일시정지·에디터 스크럽까지 궤적과 동기화된다.
  * 시간이 되감겨도(섹션 루프·점프) 이미 처리한 세그먼트로 돌아가지 않는다.
- * 이전 스윕에서 이미 닿은 컴포넌트는 노티파이 구간 전체에 걸쳐 무시한다. 서버 권위에서만 이벤트를 보낸다.
+ * 이전 스윕에서 이미 닿은 컴포넌트는 노티파이 구간 전체에 걸쳐 무시한다.
+ * 어느 머신에서 판정·전송할지는 NetPolicy 가 정한다(기본: 서버 + 소유 클라이언트).
+ * GameplayEvent 는 복제되지 않으므로 발화한 머신에서 로컬로만 전달된다.
  *
  * 컴포넌트 상대 공간으로 캐싱하므로 캐릭터 로코모션이 스윕 볼륨을 부풀리지 않는다.
  * 애님 에디터 프리뷰에서는 세그먼트 진행 규칙은 런타임과 같게 두되 물리 판정·이벤트 전송만 건너뛰고,
@@ -149,8 +151,12 @@ private:
 	TObjectPtr<UOverdriveCombatHitSweepDetector> HitDetector;
 
 	/** 공격자에게 전송할 GameplayEvent 태그. 기본값은 Combat.Event.Hit 이고, 지워서 비우면 전송 시 그 기본 태그로 대체된다. */
-	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event"))
+	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true", Categories = "Combat.Event.Hit"))
 	FGameplayTag EventTag;
+
+	/** 이 노티파이가 어느 머신에서 판정·전송을 수행할지. */
+	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
+	EOverdriveCombatNotifyNetPolicy NetPolicy = EOverdriveCombatNotifyNetPolicy::AuthorityAndAutonomous;
 
 	/** 컴포넌트 상대 공격 원점. 기즈모로 편집하며, 히트마다 TargetData 에 실려 넉백/파동 중심으로 쓰인다. */
 	UPROPERTY(EditAnywhere, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))

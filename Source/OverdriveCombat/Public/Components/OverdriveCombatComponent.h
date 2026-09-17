@@ -10,6 +10,7 @@
 
 class UAbilitySystemComponent;
 class UGameplayEffect;
+class UOverdriveCombatAbilitySystemFinder;
 class UOverdriveCombatBarrier;
 class UOverdriveCombatDamageApplier;
 class UOverdriveCombatDamageExtender;
@@ -39,8 +40,23 @@ protected:
 private:
 	TWeakObjectPtr<UAbilitySystemComponent> WeakASC;
 
-	void LinkAbilitySystem();
+	void InitializeAbilitySystem();
+	void HandleAbilitySystemFound(UAbilitySystemComponent* FoundAbilitySystem);
+	void HandleAbilitySystemFindFailed();
+	void DestroyAbilitySystemFinder();
 	void UnlinkAbilitySystem();
+
+	UPROPERTY(EditDefaultsOnly, Category = "OverdriveCombat|AbilitySystem", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<UOverdriveCombatAbilitySystemFinder> AbilitySystemFinderClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "OverdriveCombat|AbilitySystem", meta = (AllowPrivateAccess = "true", ClampMin = "0.01", UIMin = "0.01", ForceUnits = "s"))
+	float AbilitySystemFindPeriod = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "OverdriveCombat|AbilitySystem", meta = (AllowPrivateAccess = "true", ClampMin = "1", UIMin = "1"))
+	int32 AbilitySystemFindMaxCount = 20;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UOverdriveCombatAbilitySystemFinder> AbilitySystemFinder;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OverdriveCombat", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGameplayEffect> HitStopEffect;
@@ -48,6 +64,9 @@ private:
 	FActiveGameplayEffectHandle HitStopEffectHandle;
 
 public:
+	// 탐색 전략 교체. 소유 액터 생성자에서 부르는 용도이며, BeginPlay 이후 호출은 효과가 없다.
+	void SetAbilitySystemFinderClass(TSubclassOf<UOverdriveCombatAbilitySystemFinder> InFinderClass);
+
 	UFUNCTION(BlueprintCallable, Category = "OverdriveCombat")
 	void ApplyHitStop(float NewTime);
 

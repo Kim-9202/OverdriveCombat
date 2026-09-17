@@ -74,9 +74,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "OverdriveCombat")
 	FOverdriveCombatOnBarrierDurationEndDynamic OnBarrierDurationEndDynamic;
 
-	void BindOnBreakBarrier(const FOverdriveCombatOnBreakBarrierDelegate& InDelegate) { OnBreakBarrierDelegate = InDelegate;}
+	/** 배리어 파괴 시(C++). 멀티캐스트이므로 Add/Remove 로 붙인다. */
+	FOverdriveCombatOnBreakBarrierDelegate& GetOnBreakBarrierDelegate() { return OnBreakBarrierDelegate; }
 
-	void BindOnBarrierDurationEnd(const FOverdriveCombatOnBarrierDurationEndDelegate& InDelegate) { OnBarrierDurationEndDelegate = InDelegate; }
+	/** 지속시간 만료 시(C++). 멀티캐스트이므로 Add/Remove 로 붙인다. */
+	FOverdriveCombatOnBarrierDurationEndDelegate& GetOnBarrierDurationEndDelegate() { return OnBarrierDurationEndDelegate; }
 
 	UFUNCTION(BlueprintPure, Category = "OverdriveCombat")
 	float GetRemainBarrier() const { return RemainBarrier; }

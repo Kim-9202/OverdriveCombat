@@ -14,11 +14,11 @@
  * 히트 판정 디텍터(UOverdriveCombatHitBurstDetector)가 히트마다 하나씩 만들어
  * FGameplayAbilityTargetDataHandle 에 담고, GameplayEvent 로 수신 어빌리티까지 전달된다.
  *
- * NetSerialize 는 가상 함수가 아니라 GetScriptStruct() + TStructOpsTypeTraits 로
- * 다형 디스패치되므로, 파생 구조체마다 셋 다 다시 정의해야 한다(엔진 GameplayAbilityTargetTypes.h 관례).
+ * final 이다 — 파생을 지원하지 않는다. 소비 측이 전부 GetScriptStruct() 정확 일치로 이 타입을 골라내므로
+ * 파생 타입은 어디서도 경고 없이 걸러진다. 히트에 데이터를 더 실어야 하면 파생 대신 여기에 필드를 추가한다.
  */
 USTRUCT(BlueprintType, meta = (HasNativeBreak = "/Script/OverdriveCombat.OverdriveCombatLibrary.BreakAttackHitTargetData"))
-struct OVERDRIVECOMBAT_API FOverdriveCombatTargetData_AttackHit : public FGameplayAbilityTargetData_SingleTargetHit
+struct OVERDRIVECOMBAT_API FOverdriveCombatTargetData_AttackHit final : public FGameplayAbilityTargetData_SingleTargetHit
 {
 	GENERATED_BODY()
 

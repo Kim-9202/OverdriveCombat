@@ -4,11 +4,6 @@
 #include "GameplayAbilities/DamageAppliers/OverdriveCombatDamageApplier_Barrier.h"
 #include "GameplayAbilities/OverdriveCombatBarrier.h"
 
-UOverdriveCombatDamageApplier_Barrier::UOverdriveCombatDamageApplier_Barrier()
-{
-	
-}
-
 void UOverdriveCombatDamageApplier_Barrier::ApplyDamage_Implementation(float& InDamage, const FGameplayEffectSpec& Spec)
 {
 	UOverdriveCombatBarrier* Barrier = GetBarrier();

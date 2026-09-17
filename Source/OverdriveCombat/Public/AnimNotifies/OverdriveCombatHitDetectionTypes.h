@@ -87,8 +87,35 @@ struct OVERDRIVECOMBAT_API FOverdriveCombatImpactNormalSpec
 	FVector Direction = FVector(1.0f, 0.0f, 0.0f);
 };
 
+/**
+ * 노티파이가 어느 머신에서 판정·전송을 수행할지.
+ *
+ * GameplayEvent 는 복제되지 않고 머신마다 로컬로 발송되며, 애님 노티파이는 몽타주를 재생하는 모든 머신에서
+ * 발화한다. 즉 아무 제한이 없으면 접속자 수만큼 물리 스윕이 돈다. 기본값은 첫 열거자라 기본 생성값이 곧 기본 정책이다.
+ */
+UENUM()
+enum class EOverdriveCombatNotifyNetPolicy : uint8
+{
+	/** 서버와 소유 클라이언트(AutonomousProxy). 다른 클라이언트의 복제본은 건너뛴다. */
+	AuthorityAndAutonomous	UMETA(DisplayName = "Authority + Autonomous"),
+
+	/** 권위(서버)에서만. 클라이언트 전용 로직이 필요 없는 공격용. */
+	AuthorityOnly			UMETA(DisplayName = "Authority Only"),
+
+	/** 모든 머신. SimulatedProxy 의 로컬 연출까지 필요할 때만. */
+	All						UMETA(DisplayName = "All"),
+};
+
 namespace OverdriveCombatHitEvents
 {
+	/**
+	 * 정책에 비춰 이 머신에서 판정·전송을 해도 되는지.
+	 *
+	 * 두 노티파이(단발/구간)가 반드시 이 함수 하나만 쓴다 — 각자 역할 검사를 쓰면 동작이 갈린다.
+	 * 스탠드얼론·서버·복제하지 않는 액터는 전부 ROLE_Authority 라 별도 분기가 필요 없다.
+	 */
+	OVERDRIVECOMBAT_API bool ShouldFireForNetPolicy(const AActor* OwnerActor, EOverdriveCombatNotifyNetPolicy Policy);
+
 	/**
 	 * 디텍터가 채운 TargetData 를 공격자에게 GameplayEvent 로 보낸다.
 	 *
